@@ -46,10 +46,6 @@ SDL_AudioStream *ogv_stream;
 
 int InitAudioPlayback()
 {
-    #if RETRO_PLATFORM == RETRO_PSP
-    audioEnabled = false; // causes a crash on startup, will fix later <3
-    return true;
-    #endif
     StopAllSfx(); //"init"
 #if RETRO_USING_SDL1 || RETRO_USING_SDL2
     SDL_AudioSpec want;

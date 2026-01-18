@@ -121,12 +121,6 @@ int InitRenderDevice()
 
 #if RETRO_PLATFORM == RETRO_PSP
     Engine.useHQModes = false;
-    Engine.vsync = true;
-    Engine.scalingMode = 1;
-    
-    SCREEN_XSIZE = 320;
-    SCREEN_CENTERX = SCREEN_XSIZE / 2;
-    
     Engine.window = SDL_CreateWindow(gameTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 480, 272, SDL_WINDOW_SHOWN);
     if (!Engine.window) {
         return 0;
