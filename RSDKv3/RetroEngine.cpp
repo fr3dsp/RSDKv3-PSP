@@ -521,8 +521,8 @@ void RetroEngine::Run()
 #endif
     }
 
-    ReleaseAudioDevice();
     StopVideoPlayback();
+    ReleaseAudioDevice();
     ReleaseRenderDevice();
     WriteSettings();
 #if RETRO_USE_MOD_LOADER

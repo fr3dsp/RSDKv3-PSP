@@ -1,5 +1,46 @@
 #include "RetroEngine.hpp"
 
+#if RETRO_PLATFORM == RETRO_PSP
+#include <pspkernel.h>
+#include <psppower.h>
+
+volatile bool pspSuspended = false;
+
+int pspExitCallback(int arg1, int arg2, void *common) {
+    Engine.running = false;
+    return 0;
+}
+
+int pspPowerCallback(int unknown, int pwrflags, void *common) {
+    if (pwrflags & PSP_POWER_CB_POWER_SWITCH || pwrflags & PSP_POWER_CB_SUSPENDING) {
+        pspSuspended = true;
+    } else if (pwrflags & PSP_POWER_CB_RESUMING || pwrflags & PSP_POWER_CB_RESUME_COMPLETE) {
+        pspSuspended = false;
+    }
+    return 0;
+}
+
+int pspCallbackThread(SceSize args, void *argp) {
+    int cbid;
+    
+    cbid = sceKernelCreateCallback("Exit Callback", pspExitCallback, NULL);
+    sceKernelRegisterExitCallback(cbid);
+    
+    cbid = sceKernelCreateCallback("Power Callback", pspPowerCallback, NULL);
+    scePowerRegisterCallback(0, cbid);
+    
+    sceKernelSleepThreadCB();
+    return 0;
+}
+
+void pspSetupCallbacks() {
+    int thid = sceKernelCreateThread("psp_callback_thread", pspCallbackThread, 0x11, 0xFA0, 0, NULL);
+    if (thid >= 0) {
+        sceKernelStartThread(thid, 0, NULL);
+    }
+}
+#endif
+
 #if !RETRO_USE_ORIGINAL_CODE
 
 #if RETRO_PLATFORM == RETRO_WIN && _MSC_VER
@@ -50,6 +91,10 @@ void parseArguments(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
+#if RETRO_PLATFORM == RETRO_PSP
+    pspSetupCallbacks();
+#endif
+
 #if !RETRO_USE_ORIGINAL_CODE
     parseArguments(argc, argv);
 #endif
@@ -63,6 +108,10 @@ int main(int argc, char *argv[])
         FreeConsole();
 #endif
     }
+#endif
+
+#if RETRO_PLATFORM == RETRO_PSP
+    sceKernelExitGame();
 #endif
 
     return 0;

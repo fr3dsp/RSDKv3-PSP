@@ -104,13 +104,32 @@ int InitRenderDevice()
     sprintf(gameTitle, "%s%s", Engine.gameWindowText, Engine.usingDataFile_Config ? "" : " (Using Data Folder)");
 
 #if RETRO_USING_SDL2
+#if RETRO_PLATFORM == RETRO_PSP
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
+        return 0;
+    }
+#else
     SDL_Init(SDL_INIT_EVERYTHING);
+#endif
 
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
     SDL_SetHint(SDL_HINT_RENDER_VSYNC, Engine.vsync ? "1" : "0");
+#if RETRO_PLATFORM != RETRO_PSP
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_WINRT_HANDLE_BACK_BUTTON, "1");
+#endif
 
+#if RETRO_PLATFORM == RETRO_PSP
+    Engine.useHQModes = false;
+    Engine.window = SDL_CreateWindow(gameTitle, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 480, 272, SDL_WINDOW_SHOWN);
+    if (!Engine.window) {
+        return 0;
+    }
+    Engine.renderer = SDL_CreateRenderer(Engine.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (!Engine.renderer) {
+        return 0;
+    }
+#else
     byte flags = 0;
 #if RETRO_USING_OPENGL
     flags |= SDL_WINDOW_OPENGL;
@@ -152,6 +171,7 @@ int InitRenderDevice()
 #if !RETRO_USING_OPENGL
     Engine.renderer = SDL_CreateRenderer(Engine.window, -1, SDL_RENDERER_ACCELERATED);
 #endif
+#endif
 
     if (!Engine.window) {
         PrintLog("ERROR: failed to create window!");
@@ -189,6 +209,7 @@ int InitRenderDevice()
     }
 #endif
 
+#if RETRO_PLATFORM != RETRO_PSP
     if (Engine.borderless) {
         SDL_RestoreWindow(Engine.window);
         SDL_SetWindowBordered(Engine.window, SDL_FALSE);
@@ -204,6 +225,10 @@ int InitRenderDevice()
     else {
         printf("error: %s", SDL_GetError());
     }
+#else
+    Engine.isFullScreen      = true;
+    Engine.screenRefreshRate = 60;
+#endif
 
 #endif
 
@@ -239,6 +264,10 @@ int InitRenderDevice()
         return 0;
     }*/
 
+#if RETRO_PLATFORM == RETRO_PSP
+    Engine.isFullScreen      = true;
+    Engine.screenRefreshRate = 60;
+#else
     if (Engine.startFullScreen) {
         Engine.windowSurface =
             SDL_SetVideoMode(SCREEN_XSIZE * Engine.windowScale, SCREEN_YSIZE * Engine.windowScale, 16, SDL_SWSURFACE | SDL_FULLSCREEN);
@@ -256,6 +285,7 @@ int InitRenderDevice()
 
     Engine.useHQModes = false; // disabled
     Engine.borderless = false; // disabled
+#endif
 #endif
 
 #if RETRO_USING_OPENGL

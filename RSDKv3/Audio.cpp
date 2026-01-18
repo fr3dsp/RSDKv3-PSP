@@ -691,8 +691,8 @@ void LoadSfx(char *filePath, byte sfxID)
         }
         else {
             SDL_AudioSpec wav_spec;
-            uint wav_length;
-            byte *wav_buffer;
+            Uint32 wav_length;
+            Uint8 *wav_buffer;
             SDL_AudioSpec *wav = SDL_LoadWAV_RW(src, 0, &wav_spec, &wav_buffer, &wav_length);
 
             SDL_RWclose(src);
