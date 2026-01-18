@@ -11,6 +11,9 @@ int trackID       = -1;
 int sfxVolume     = MAX_VOLUME;
 int bgmVolume     = MAX_VOLUME;
 bool audioEnabled = false;
+#if RETRO_USING_PSP
+volatile bool pspAudioReady = false;
+#endif
 
 int nextChannelPos;
 bool musicEnabled;
@@ -28,6 +31,15 @@ StreamInfo *streamInfoPtr = NULL;
 
 int currentMusicTrack = -1;
 
+#define AUDIO_FREQUENCY (44100)
+#define AUDIO_SAMPLES   (0x800)
+#define AUDIO_CHANNELS  (2)
+#define ADJUST_VOLUME(s, v) (s = (s * v) / MAX_VOLUME)
+
+#if RETRO_USING_PSP
+#define PSP_AUDIO_SAMPLE_COUNT 1024
+#endif
+
 #if RETRO_USING_SDL1 || RETRO_USING_SDL2
 SDL_AudioSpec audioDeviceFormat;
 
@@ -36,18 +48,25 @@ SDL_AudioDeviceID audioDevice;
 SDL_AudioStream *ogv_stream;
 #endif
 
-#define AUDIO_FREQUENCY (44100)
-#define AUDIO_FORMAT    (AUDIO_S16SYS) /**< Signed 16-bit samples */
-#define AUDIO_SAMPLES   (0x800)
-#define AUDIO_CHANNELS  (2)
-
-#define ADJUST_VOLUME(s, v) (s = (s * v) / MAX_VOLUME)
+#define AUDIO_FORMAT    (AUDIO_S16SYS)
 #endif
 
 int InitAudioPlayback()
 {
-    StopAllSfx(); //"init"
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+    StopAllSfx();
+#if RETRO_USING_PSP
+    pspAudioReady = false;
+    if (PspPlatform::InitAudio(ProcessAudioPlayback, nullptr)) {
+        audioEnabled = true;
+        globalSFXCount = 0;
+        for (int i = 0; i < CHANNEL_COUNT; ++i) sfxChannels[i].sfxID = -1;
+        pspAudioReady = true;
+        return true;
+    } else {
+        audioEnabled = false;
+        return true;
+    }
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
     SDL_AudioSpec want;
     want.freq     = AUDIO_FREQUENCY;
     want.format   = AUDIO_FORMAT;
@@ -100,6 +119,9 @@ int InitAudioPlayback()
 
 void LoadGlobalSfx()
 {
+#if RETRO_USING_PSP
+    PspPlatform::DebugLog("LoadGlobalSfx: start");
+#endif
     FileInfo info;
     FileInfo infoStore;
     char strBuffer[0x100];
@@ -108,6 +130,9 @@ void LoadGlobalSfx()
 
     globalSFXCount = 0;
 
+#if RETRO_USING_PSP
+    PspPlatform::DebugLog("LoadGlobalSfx: loading GameConfig.bin");
+#endif
     if (LoadFile("Data/Game/GameConfig.bin", &info)) {
         infoStore = info;
 
@@ -153,15 +178,24 @@ void LoadGlobalSfx()
         // Read SFX
         FileRead(&fileBuffer, 1);
         globalSFXCount = fileBuffer;
+#if RETRO_USING_PSP
+        PspPlatform::DebugLog("LoadGlobalSfx: %d SFX to load", globalSFXCount);
+#endif
         for (byte s = 0; s < globalSFXCount; ++s) {
             FileRead(&fileBuffer, 1);
             FileRead(strBuffer, fileBuffer);
             strBuffer[fileBuffer] = 0;
 
+#if RETRO_USING_PSP
+            PspPlatform::DebugLog("SFX %d: %s", s, strBuffer);
+#endif
             GetFileInfo(&infoStore);
             CloseFile();
             LoadSfx(strBuffer, s);
             SetFileInfo(&infoStore);
+#if RETRO_USING_PSP
+            PspPlatform::DebugLog("SFX %d done", s);
+#endif
 
 #if RETRO_USE_MOD_LOADER
             SetSfxName(strBuffer, s, true);
@@ -223,7 +257,39 @@ void ProcessMusicStream(Sint32 *stream, size_t bytes_wanted)
     switch (musicStatus) {
         case MUSIC_READY:
         case MUSIC_PLAYING: {
-#if RETRO_USING_SDL2
+#if RETRO_USING_PSP
+            size_t bytes_gotten = 0;
+            byte *buffer = (byte *)malloc(bytes_wanted);
+            memset(buffer, 0, bytes_wanted);
+            while (bytes_gotten < bytes_wanted) {
+                long bytes_read = ov_read(&streamInfoPtr->vorbisFile, (char *)streamInfoPtr->buffer,
+                                          sizeof(streamInfoPtr->buffer) > (bytes_wanted - bytes_gotten) ? (bytes_wanted - bytes_gotten)
+                                                                                                        : sizeof(streamInfoPtr->buffer),
+                                          0, 2, 1, &streamInfoPtr->vorbBitstream);
+
+                if (bytes_read == 0) {
+                    if (streamInfoPtr->trackLoop) {
+                        ov_pcm_seek(&streamInfoPtr->vorbisFile, streamInfoPtr->loopPoint);
+                        continue;
+                    }
+                    else {
+                        musicStatus = MUSIC_STOPPED;
+                        break;
+                    }
+                }
+
+                if (bytes_read > 0) {
+                    memcpy(buffer + bytes_gotten, streamInfoPtr->buffer, bytes_read);
+                    bytes_gotten += bytes_read;
+                }
+            }
+
+            if (bytes_gotten > 0) {
+                ProcessAudioMixing(stream, (const Sint16 *)buffer, bytes_gotten / sizeof(Sint16), (bgmVolume * masterVolume) / MAX_VOLUME, 0);
+            }
+            if (bytes_wanted > 0)
+                free(buffer);
+#elif RETRO_USING_SDL2
             while (musicStatus == MUSIC_PLAYING && SDL_AudioStreamAvailable(streamInfoPtr->stream) < bytes_wanted) {
                 // We need more samples: get some
                 long bytes_read = ov_read(&streamInfoPtr->vorbisFile, (char *)streamInfoPtr->buffer, sizeof(streamInfoPtr->buffer), 0, 2, 1,
@@ -320,6 +386,78 @@ void ProcessMusicStream(Sint32 *stream, size_t bytes_wanted)
     }
 }
 
+#if RETRO_USING_PSP
+void ProcessAudioPlayback(void *buffer, unsigned int samples, void *userdata)
+{
+    if (!buffer) return;
+    
+    if (!pspAudioReady || !audioEnabled) {
+        memset(buffer, 0, samples * 4);
+        return;
+    }
+
+    Sint16 *output_buffer = (Sint16 *)buffer;
+    size_t samples_remaining = samples * 2;
+    
+    while (samples_remaining != 0) {
+        Sint32 mix_buffer[MIX_BUFFER_SAMPLES];
+        memset(mix_buffer, 0, sizeof(mix_buffer));
+
+        const size_t samples_to_do = (samples_remaining < MIX_BUFFER_SAMPLES) ? samples_remaining : MIX_BUFFER_SAMPLES;
+
+        ProcessMusicStream(mix_buffer, samples_to_do * sizeof(Sint16));
+
+        for (byte i = 0; i < CHANNEL_COUNT; ++i) {
+            ChannelInfo *sfx = &sfxChannels[i];
+            if (sfx == NULL || sfx->sfxID < 0)
+                continue;
+
+            if (sfx->samplePtr) {
+                Sint16 sfxBuffer[MIX_BUFFER_SAMPLES];
+                size_t samples_done = 0;
+                while (samples_done != samples_to_do) {
+                    size_t sampleLen = (sfx->sampleLength < samples_to_do - samples_done) ? sfx->sampleLength : samples_to_do - samples_done;
+                    memcpy(&sfxBuffer[samples_done], sfx->samplePtr, sampleLen * sizeof(Sint16));
+
+                    samples_done += sampleLen;
+                    sfx->samplePtr += sampleLen;
+                    sfx->sampleLength -= sampleLen;
+
+                    if (sfx->sampleLength == 0) {
+                        if (sfx->loopSFX) {
+                            sfx->samplePtr = sfxList[sfx->sfxID].buffer;
+                            sfx->sampleLength = sfxList[sfx->sfxID].length;
+                        }
+                        else {
+                            MEM_ZEROP(sfx);
+                            sfx->sfxID = -1;
+                            break;
+                        }
+                    }
+                }
+
+                ProcessAudioMixing(mix_buffer, sfxBuffer, (int)samples_done, sfxVolume, sfx->pan);
+            }
+        }
+
+        for (size_t i = 0; i < samples_to_do; ++i) {
+            const Sint16 max_audioval = ((1 << (16 - 1)) - 1);
+            const Sint16 min_audioval = -(1 << (16 - 1));
+
+            const Sint32 sample = mix_buffer[i];
+
+            if (sample > max_audioval)
+                *output_buffer++ = max_audioval;
+            else if (sample < min_audioval)
+                *output_buffer++ = min_audioval;
+            else
+                *output_buffer++ = sample;
+        }
+
+        samples_remaining -= samples_to_do;
+    }
+}
+#else
 void ProcessAudioPlayback(void *userdata, Uint8 *stream, int len)
 {
     (void)userdata; // Unused
@@ -484,8 +622,9 @@ void ProcessAudioPlayback(void *userdata, Uint8 *stream, int len)
         samples_remaining -= samples_to_do;
     }
 }
+#endif
 
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP || RETRO_USING_SDL1 || RETRO_USING_SDL2
 void ProcessAudioMixing(Sint32 *dst, const Sint16 *src, int len, int volume, sbyte pan)
 {
     if (volume == 0)
@@ -585,15 +724,16 @@ void LoadMusic()
             strmInfo->vorbBitstream = -1;
             strmInfo->vorbisFile.vi = ov_info(&strmInfo->vorbisFile, -1);
 
-#if RETRO_USING_SDL2
+#if RETRO_USING_PSP
+            strmInfo->sampleRate = (int)strmInfo->vorbisFile.vi->rate;
+            strmInfo->channels = strmInfo->vorbisFile.vi->channels;
+#elif RETRO_USING_SDL2
             strmInfo->stream = SDL_NewAudioStream(AUDIO_S16, strmInfo->vorbisFile.vi->channels, (int)strmInfo->vorbisFile.vi->rate,
                                                   audioDeviceFormat.format, audioDeviceFormat.channels, audioDeviceFormat.freq);
             if (!strmInfo->stream) {
                 PrintLog("Failed to create stream: %s", SDL_GetError());
             }
-#endif
-
-#if RETRO_USING_SDL1
+#elif RETRO_USING_SDL1
             strmInfo->spec.format   = AUDIO_S16;
             strmInfo->spec.channels = strmInfo->vorbisFile.vi->channels;
             strmInfo->spec.freq     = (int)strmInfo->vorbisFile.vi->rate;
@@ -679,12 +819,165 @@ void LoadSfx(char *filePath, byte sfxID)
     StrAdd(fullPath, filePath);
 
     if (LoadFile(fullPath, &info)) {
-        byte *sfx = new byte[info.vFileSize];
+#if RETRO_USING_PSP
+        PspPlatform::DebugLog("  Alloc %d bytes", info.vFileSize);
+#endif
+        byte *sfx = (byte*)malloc(info.vFileSize);
+        if (!sfx) {
+#if RETRO_USING_PSP
+            PspPlatform::DebugLog("  FAILED to alloc!");
+#endif
+            CloseFile();
+            return;
+        }
+#if RETRO_USING_PSP
+        PspPlatform::DebugLog("  Alloc OK at %p", sfx);
+        PspPlatform::DebugLog("  Reading file...");
+#endif
         FileRead(sfx, info.vFileSize);
+#if RETRO_USING_PSP
+        PspPlatform::DebugLog("  Read done, closing...");
+#endif
         CloseFile();
+#if RETRO_USING_PSP
+        PspPlatform::DebugLog("  Closed, locking audio...");
+#endif
 
         LockAudioDevice();
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP
+        if (info.vFileSize < 44) {
+            PrintLog("Unable to read sfx (too small): %s", info.fileName);
+            free(sfx);
+            UnlockAudioDevice();
+            return;
+        }
+        
+        if (sfx[0] != 'R' || sfx[1] != 'I' || sfx[2] != 'F' || sfx[3] != 'F') {
+            PrintLog("Unable to read sfx (not RIFF): %s", info.fileName);
+            free(sfx);
+            UnlockAudioDevice();
+            return;
+        }
+        
+        int pos = 12;
+        int dataPos = 0;
+        int dataLen = 0;
+        int channels = 1;
+        int sampleRate = 44100;
+        int bitsPerSample = 16;
+        
+        while (pos < (int)info.vFileSize - 8) {
+            char chunkId[5] = {0};
+            memcpy(chunkId, sfx + pos, 4);
+            int chunkSize = *(int*)(sfx + pos + 4);
+            
+            if (strcmp(chunkId, "fmt ") == 0) {
+                channels = *(short*)(sfx + pos + 10);
+                sampleRate = *(int*)(sfx + pos + 12);
+                bitsPerSample = *(short*)(sfx + pos + 22);
+            }
+            else if (strcmp(chunkId, "data") == 0) {
+                dataPos = pos + 8;
+                dataLen = chunkSize;
+                break;
+            }
+            
+            pos += 8 + chunkSize;
+            if (chunkSize & 1) pos++;
+        }
+        
+        if (dataPos > 0 && dataLen > 0) {
+            int srcSampleCount = dataLen / (bitsPerSample / 8) / channels;
+            
+            Sint16* monoBuffer = (Sint16*)malloc(srcSampleCount * sizeof(Sint16));
+            if (!monoBuffer) {
+#if RETRO_USING_PSP
+                PspPlatform::DebugLog("  FAILED alloc monoBuffer!");
+#endif
+                free(sfx);
+                UnlockAudioDevice();
+                return;
+            }
+            
+            if (bitsPerSample == 16) {
+                Sint16* src16 = (Sint16*)(sfx + dataPos);
+                if (channels == 2) {
+                    for (int i = 0; i < srcSampleCount; i++) {
+                        monoBuffer[i] = (src16[i * 2] + src16[i * 2 + 1]) / 2;
+                    }
+                } else {
+                    memcpy(monoBuffer, sfx + dataPos, srcSampleCount * sizeof(Sint16));
+                }
+            }
+            else if (bitsPerSample == 8) {
+                byte* src8 = sfx + dataPos;
+                if (channels == 2) {
+                    for (int i = 0; i < srcSampleCount; i++) {
+                        int sample = (((int)src8[i * 2] - 128) + ((int)src8[i * 2 + 1] - 128)) / 2;
+                        monoBuffer[i] = sample * 256;
+                    }
+                } else {
+                    for (int i = 0; i < srcSampleCount; i++) {
+                        monoBuffer[i] = ((int)src8[i] - 128) * 256;
+                    }
+                }
+            }
+            
+            int resampledCount = srcSampleCount;
+            Sint16* resampledBuffer = monoBuffer;
+            
+            if (sampleRate != AUDIO_FREQUENCY) {
+                resampledCount = (int)((long long)srcSampleCount * AUDIO_FREQUENCY / sampleRate);
+                resampledBuffer = (Sint16*)malloc(resampledCount * sizeof(Sint16));
+                if (!resampledBuffer) {
+#if RETRO_USING_PSP
+                    PspPlatform::DebugLog("  FAILED alloc resampledBuffer!");
+#endif
+                    free(monoBuffer);
+                    free(sfx);
+                    UnlockAudioDevice();
+                    return;
+                }
+                
+                for (int i = 0; i < resampledCount; i++) {
+                    int srcIdx = (int)((long long)i * sampleRate / AUDIO_FREQUENCY);
+                    if (srcIdx >= srcSampleCount) srcIdx = srcSampleCount - 1;
+                    resampledBuffer[i] = monoBuffer[srcIdx];
+                }
+                free(monoBuffer);
+            }
+            
+            int stereoCount = resampledCount * 2;
+            sfxList[sfxID].buffer = (Sint16*)malloc(stereoCount * sizeof(Sint16));
+            if (!sfxList[sfxID].buffer) {
+#if RETRO_USING_PSP
+                PspPlatform::DebugLog("  FAILED alloc stereo buffer!");
+#endif
+                free(resampledBuffer);
+                free(sfx);
+                UnlockAudioDevice();
+                return;
+            }
+            for (int i = 0; i < resampledCount; i++) {
+                sfxList[sfxID].buffer[i * 2] = resampledBuffer[i];
+                sfxList[sfxID].buffer[i * 2 + 1] = resampledBuffer[i];
+            }
+            free(resampledBuffer);
+            
+            StrCopy(sfxList[sfxID].name, filePath);
+            sfxList[sfxID].length = stereoCount;
+            sfxList[sfxID].loaded = true;
+#if RETRO_USING_PSP
+            PspPlatform::DebugLog("  SFX loaded: %d samples", stereoCount);
+#endif
+        }
+        else {
+            PrintLog("Unable to read sfx (no data chunk): %s", info.fileName);
+        }
+        
+        free(sfx);
+        UnlockAudioDevice();
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
         SDL_RWops *src = SDL_RWFromMem(sfx, info.vFileSize);
         if (src == NULL) {
             PrintLog("Unable to open sfx: %s", info.fileName);

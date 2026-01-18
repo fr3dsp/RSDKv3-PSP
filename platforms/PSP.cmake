@@ -28,28 +28,47 @@ else()
     target_compile_options(RetroEngine PRIVATE ${VORBIS_STATIC_CFLAGS})
 endif()
 
-pkg_check_modules(THEORA theora theoradec)
+option(RETRO_USE_PSP_NATIVE "Use native PSP APIs instead of SDL" ON)
 
-if(NOT THEORA_FOUND)
-    set(COMPILE_THEORA TRUE)
-    message(NOTICE "libtheora not found, attempting to build from source")
+if(RETRO_USE_PSP_NATIVE)
+    message("Using native PSP APIs (no SDL)")
+    target_compile_definitions(RetroEngine PRIVATE RETRO_USE_PSP_NATIVE=1)
+    target_link_libraries(RetroEngine
+        pspaudiolib
+        pspaudio
+        pspgu
+        pspgum
+        pspge
+        pspdisplay
+        psprtc
+        pspctrl
+        psppower
+        pspdebug
+    )
 else()
-    message("found libtheora")
-    target_link_libraries(RetroEngine ${THEORA_STATIC_LIBRARIES})
-    target_link_options(RetroEngine PRIVATE ${THEORA_STATIC_LDLIBS_OTHER})
-    target_compile_options(RetroEngine PRIVATE ${THEORA_STATIC_CFLAGS})
-endif()
+    pkg_check_modules(THEORA theora theoradec)
 
-if(RETRO_SDL_VERSION STREQUAL "2")
-    pkg_check_modules(SDL2 sdl2 REQUIRED)
-    target_link_libraries(RetroEngine ${SDL2_STATIC_LIBRARIES})
-    target_link_options(RetroEngine PRIVATE ${SDL2_STATIC_LDLIBS_OTHER})
-    target_compile_options(RetroEngine PRIVATE ${SDL2_STATIC_CFLAGS})
-elseif(RETRO_SDL_VERSION STREQUAL "1")
-    pkg_check_modules(SDL1 sdl1 REQUIRED)
-    target_link_libraries(RetroEngine ${SDL1_STATIC_LIBRARIES})
-    target_link_options(RetroEngine PRIVATE ${SDL1_STATIC_LDLIBS_OTHER})
-    target_compile_options(RetroEngine PRIVATE ${SDL1_STATIC_CFLAGS})
+    if(NOT THEORA_FOUND)
+        set(COMPILE_THEORA TRUE)
+        message(NOTICE "libtheora not found, attempting to build from source")
+    else()
+        message("found libtheora")
+        target_link_libraries(RetroEngine ${THEORA_STATIC_LIBRARIES})
+        target_link_options(RetroEngine PRIVATE ${THEORA_STATIC_LDLIBS_OTHER})
+        target_compile_options(RetroEngine PRIVATE ${THEORA_STATIC_CFLAGS})
+    endif()
+
+    if(RETRO_SDL_VERSION STREQUAL "2")
+        pkg_check_modules(SDL2 sdl2 REQUIRED)
+        target_link_libraries(RetroEngine ${SDL2_STATIC_LIBRARIES})
+        target_link_options(RetroEngine PRIVATE ${SDL2_STATIC_LDLIBS_OTHER})
+        target_compile_options(RetroEngine PRIVATE ${SDL2_STATIC_CFLAGS})
+    elseif(RETRO_SDL_VERSION STREQUAL "1")
+        pkg_check_modules(SDL1 sdl1 REQUIRED)
+        target_link_libraries(RetroEngine ${SDL1_STATIC_LIBRARIES})
+        target_link_options(RetroEngine PRIVATE ${SDL1_STATIC_LDLIBS_OTHER})
+        target_compile_options(RetroEngine PRIVATE ${SDL1_STATIC_CFLAGS})
+    endif()
 endif()
 
 if(NOT GAME_STATIC)

@@ -4,7 +4,18 @@
 #include <pspkernel.h>
 #include <psppower.h>
 
+PSP_MODULE_INFO("SonicCD", 0, 1, 0);
+PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
+PSP_HEAP_SIZE_KB(-1024);
+
 volatile bool pspSuspended = false;
+
+ushort* pspVramBuffer = nullptr;
+u64 pspTickFrequency = 0;
+volatile bool pspAudioRunning = false;
+void (*pspUserAudioCallback)(void*, unsigned int, void*) = nullptr;
+void* pspUserAudioData = nullptr;
+unsigned int __attribute__((aligned(16))) pspDisplayList[256];
 
 int pspExitCallback(int arg1, int arg2, void *common) {
     Engine.running = false;
@@ -92,6 +103,7 @@ void parseArguments(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
 #if RETRO_PLATFORM == RETRO_PSP
+    scePowerSetClockFrequency(333, 333, 166);
     pspSetupCallbacks();
 #endif
 

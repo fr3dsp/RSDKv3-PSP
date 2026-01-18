@@ -8,6 +8,10 @@
 #include <unistd.h>
 #endif
 
+#if RETRO_PLATFORM == RETRO_PSP
+extern volatile bool pspSuspended;
+#endif
+
 bool usingCWD        = false;
 bool engineDebugMode = false;
 byte renderType      = RENDER_SW;
@@ -32,7 +36,14 @@ inline int GetLowerRate(int intendRate, int targetRate)
 
 bool ProcessEvents()
 {
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP
+    if (pspSuspended) {
+        Engine.hasFocus = false;
+        return Engine.running;
+    }
+    Engine.hasFocus = true;
+    return Engine.running;
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
     while (SDL_PollEvent(&Engine.sdlEvents)) {
         // Main Events
         switch (Engine.sdlEvents.type) {
@@ -369,14 +380,25 @@ void RetroEngine::Init()
 
 void RetroEngine::Run()
 {
+#if RETRO_USING_PSP
+    PspPlatform::InitTiming();
+    unsigned long long targetFreq = PspPlatform::GetPerformanceFrequency() / Engine.refreshRate;
+    unsigned long long curTicks   = 0;
+    unsigned long long prevTicks  = 0;
+#else
     unsigned long long targetFreq = SDL_GetPerformanceFrequency() / Engine.refreshRate;
     unsigned long long curTicks   = 0;
     unsigned long long prevTicks  = 0;
+#endif
 
     while (running) {
 #if !RETRO_USE_ORIGINAL_CODE
         if (!vsync) {
+#if RETRO_USING_PSP
+            curTicks = PspPlatform::GetPerformanceCounter();
+#else
             curTicks = SDL_GetPerformanceCounter();
+#endif
             if (curTicks < prevTicks + targetFreq)
                 continue;
             prevTicks = curTicks;
@@ -529,7 +551,10 @@ void RetroEngine::Run()
     SaveMods();
 #endif
 
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP
+    PspPlatform::ReleaseDisplay();
+    PspPlatform::ReleaseAudio();
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
     SDL_Quit();
 #endif
 }

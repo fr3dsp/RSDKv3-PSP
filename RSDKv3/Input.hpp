@@ -92,6 +92,9 @@ enum ExtraSDLButtons {
 
 void ControllerInit(byte controllerID);
 void ControllerClose(byte controllerID);
+#elif RETRO_USING_PSP
+void ControllerInit(byte controllerID);
+void ControllerClose(byte controllerID);
 #endif
 
 #if RETRO_USING_SDL1

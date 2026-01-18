@@ -1,4 +1,5 @@
 #include "RetroEngine.hpp"
+#include <cstdarg>
 
 int touchFlags = 0;
 

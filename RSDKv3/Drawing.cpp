@@ -103,7 +103,30 @@ int InitRenderDevice()
 
     sprintf(gameTitle, "%s%s", Engine.gameWindowText, Engine.usingDataFile_Config ? "" : " (Using Data Folder)");
 
-#if RETRO_USING_SDL2
+#if RETRO_USING_PSP
+    SCREEN_XSIZE = 400;
+    SCREEN_CENTERX = SCREEN_XSIZE / 2;
+    SetScreenSize(SCREEN_XSIZE, 400);
+    
+    if (!PspPlatform::InitDisplay())
+        return 0;
+    
+    Engine.useHQModes = false;
+    Engine.isFullScreen = true;
+    Engine.screenRefreshRate = 60;
+    Engine.vsync = false;
+    
+    if (renderType == RENDER_SW) {
+        Engine.frameBuffer = new ushort[GFX_LINESIZE * SCREEN_YSIZE];
+        if (!Engine.frameBuffer)
+            return 0;
+        memset(Engine.frameBuffer, 0, (GFX_LINESIZE * SCREEN_YSIZE) * sizeof(ushort));
+    }
+    
+    OBJECT_BORDER_X2 = SCREEN_XSIZE + 0x80;
+    
+    return 1;
+#elif RETRO_USING_SDL2
 #if RETRO_PLATFORM == RETRO_PSP
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
         return 0;
@@ -445,7 +468,10 @@ void FlipScreen()
 #endif
 
     if (renderType == RENDER_SW) {
-#if RETRO_USING_OPENGL
+#if RETRO_USING_PSP
+        PspPlatform::CopyToVram(Engine.frameBuffer, SCREEN_XSIZE, SCREEN_YSIZE, GFX_LINESIZE);
+        PspPlatform::FlipScreen();
+#elif RETRO_USING_OPENGL
 
 #if !RETRO_USE_ORIGINAL_CODE
         if (dimAmount < 1.0 && stageMode != STAGEMODE_PAUSED)
@@ -1083,7 +1109,9 @@ void ReleaseRenderDevice()
 
 void SetFullScreen(bool fs)
 {
-
+#if RETRO_USING_PSP
+    Engine.isFullScreen = true;
+#else
     if (fs) {
 #if RETRO_USING_SDL1
         Engine.windowSurface =
@@ -1164,6 +1192,7 @@ void SetFullScreen(bool fs)
 #endif
 #endif
     }
+#endif
 }
 
 void GenerateBlendLookupTable()
@@ -4063,8 +4092,8 @@ void Draw3DFloorLayer(int layerID)
         int layerHeight        = layer->ysize << 7;
         int layerYPos          = layer->YPos;
         int layerZPos          = layer->ZPos;
-        int sinValue           = sinMLookupTable[layer->angle];
-        int cosValue           = cosMLookupTable[layer->angle];
+        int sinValue           = SinM(layer->angle);
+        int cosValue           = CosM(layer->angle);
         byte *gfxLineBufferPtr = &gfxLineBuffer[((SCREEN_YSIZE / 2) + 12)];
         ushort *frameBufferPtr = &Engine.frameBuffer[((SCREEN_YSIZE / 2) + 12) * GFX_LINESIZE];
         int layerXPos          = layer->XPos >> 4;
@@ -4161,11 +4190,11 @@ void Draw3DFloorLayer(int layerID)
         indexSize3D += 6;
         if (hq3DFloorEnabled) {
             sinValue512 = (layer->XPos >> 16) - 0x100;
-            sinValue512 += (sin512LookupTable[layer->angle] >> 1);
+            sinValue512 += (Sin512(layer->angle) >> 1);
             sinValue512 = sinValue512 >> 4 << 4;
 
             cosValue512 = (layer->ZPos >> 16) - 0x100;
-            cosValue512 += (cos512LookupTable[layer->angle] >> 1);
+            cosValue512 += (Cos512(layer->angle) >> 1);
             cosValue512 = cosValue512 >> 4 << 4;
             for (int i = 32; i > 0; i--) {
                 for (int j = 32; j > 0; j--) {
@@ -4394,11 +4423,11 @@ void Draw3DFloorLayer(int layerID)
         }
         else {
             sinValue512 = (layer->XPos >> 16) - 0xA0;
-            sinValue512 += sin512LookupTable[layer->angle] / 3;
+            sinValue512 += Sin512(layer->angle) / 3;
             sinValue512 = sinValue512 >> 4 << 4;
 
             cosValue512 = (layer->ZPos >> 16) - 0xA0;
-            cosValue512 += cos512LookupTable[layer->angle] / 3;
+            cosValue512 += Cos512(layer->angle) / 3;
             cosValue512 = cosValue512 >> 4 << 4;
             for (int i = 20; i > 0; i--) {
                 for (int j = 20; j > 0; j--) {
@@ -4642,8 +4671,8 @@ void Draw3DSkyLayer(int layerID)
         int layerWidth         = layer->xsize << 7;
         int layerHeight        = layer->ysize << 7;
         int layerYPos          = layer->YPos;
-        int sinValue           = sinMLookupTable[layer->angle & 0x1FF];
-        int cosValue           = cosMLookupTable[layer->angle & 0x1FF];
+        int sinValue           = SinM(layer->angle & 0x1FF);
+        int cosValue           = CosM(layer->angle & 0x1FF);
         ushort *frameBufferPtr = &Engine.frameBuffer[((SCREEN_YSIZE / 2) + 12) * GFX_LINESIZE];
         ushort *bufferPtr      = Engine.frameBuffer2x;
         if (!drawStageGFXHQ)
@@ -5616,8 +5645,8 @@ void DrawSpriteRotated(int direction, int XPos, int YPos, int pivotX, int pivotY
             angle += 0x200;
         if (angle)
             angle = 0x200 - angle;
-        int sine   = sin512LookupTable[angle];
-        int cosine = cos512LookupTable[angle];
+        int sine   = Sin512(angle);
+        int cosine = Cos512(angle);
         int XPositions[4];
         int YPositions[4];
 
@@ -5760,8 +5789,8 @@ void DrawSpriteRotated(int direction, int XPos, int YPos, int pivotX, int pivotY
         if (rotation != 0) {
             rotation = 0x200 - rotation;
         }
-        int sin = sin512LookupTable[rotation];
-        int cos = cos512LookupTable[rotation];
+        int sin = Sin512(rotation);
+        int cos = Cos512(rotation);
         if (surface->texStartX > -1 && gfxVertexSize < VERTEX_COUNT && XPos > -8192 && XPos < 13952 && YPos > -8192 && YPos < 12032) {
             if (direction == FLIP_NONE) {
                 int x                               = -pivotX;
@@ -5883,8 +5912,8 @@ void DrawSpriteRotozoom(int direction, int XPos, int YPos, int pivotX, int pivot
             angle += 0x200;
         if (angle)
             angle = 0x200 - angle;
-        int sine   = scale * sin512LookupTable[angle] >> 9;
-        int cosine = scale * cos512LookupTable[angle] >> 9;
+        int sine   = scale * Sin512(angle) >> 9;
+        int cosine = scale * Cos512(angle) >> 9;
         int XPositions[4];
         int YPositions[4];
 
@@ -5913,8 +5942,8 @@ void DrawSpriteRotozoom(int direction, int XPos, int YPos, int pivotX, int pivot
             YPositions[3] = YPos + ((cosine * b - sine * a) >> 9);
         }
         int truescale = (signed int)(float)((float)(512.0 / (float)scale) * 512.0);
-        sine          = truescale * sin512LookupTable[angle] >> 9;
-        cosine        = truescale * cos512LookupTable[angle] >> 9;
+        sine          = truescale * Sin512(angle) >> 9;
+        cosine        = truescale * Cos512(angle) >> 9;
 
         int left = GFX_LINESIZE;
         for (int i = 0; i < 4; ++i) {
@@ -6029,8 +6058,8 @@ void DrawSpriteRotozoom(int direction, int XPos, int YPos, int pivotX, int pivot
         if (rotation != 0)
             rotation = 0x200 - rotation;
 
-        int sin = sin512LookupTable[rotation] * scale >> 9;
-        int cos = cos512LookupTable[rotation] * scale >> 9;
+        int sin = Sin512(rotation) * scale >> 9;
+        int cos = Cos512(rotation) * scale >> 9;
         if (surface->texStartX > -1 && gfxVertexSize < VERTEX_COUNT && XPos > -8192 && XPos < 13952 && YPos > -8192 && YPos < 12032) {
             if (direction == FLIP_NONE) {
                 int x                               = -pivotX;

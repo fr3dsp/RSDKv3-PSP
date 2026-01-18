@@ -100,8 +100,8 @@ void MatrixRotateX(Matrix *matrix, int rotationX)
     if (rotationX < 0)
         rotationX = 0x200 - rotationX;
     rotationX &= 0x1FF;
-    int sine             = sin512LookupTable[rotationX] >> 1;
-    int cosine           = cos512LookupTable[rotationX] >> 1;
+    int sine             = Sin512(rotationX) >> 1;
+    int cosine           = Cos512(rotationX) >> 1;
     matrix->values[0][0] = 0x100;
     matrix->values[0][1] = 0;
     matrix->values[0][2] = 0;
@@ -124,8 +124,8 @@ void MatrixRotateY(Matrix *matrix, int rotationY)
     if (rotationY < 0)
         rotationY = 0x200 - rotationY;
     rotationY &= 0x1FF;
-    int sine             = sin512LookupTable[rotationY] >> 1;
-    int cosine           = cos512LookupTable[rotationY] >> 1;
+    int sine             = Sin512(rotationY) >> 1;
+    int cosine           = Cos512(rotationY) >> 1;
     matrix->values[0][0] = cosine;
     matrix->values[0][1] = 0;
     matrix->values[0][2] = sine;
@@ -148,8 +148,8 @@ void MatrixRotateZ(Matrix *matrix, int rotationZ)
     if (rotationZ < 0)
         rotationZ = 0x200 - rotationZ;
     rotationZ &= 0x1FF;
-    int sine             = sin512LookupTable[rotationZ] >> 1;
-    int cosine           = cos512LookupTable[rotationZ] >> 1;
+    int sine             = Sin512(rotationZ) >> 1;
+    int cosine           = Cos512(rotationZ) >> 1;
     matrix->values[0][0] = cosine;
     matrix->values[0][1] = 0;
     matrix->values[0][2] = sine;
@@ -178,12 +178,12 @@ void MatrixRotateXYZ(Matrix *matrix, int rotationX, int rotationY, int rotationZ
     if (rotationZ < 0)
         rotationZ = 0x200 - rotationZ;
     rotationZ &= 0x1FF;
-    int sineX   = sin512LookupTable[rotationX] >> 1;
-    int cosineX = cos512LookupTable[rotationX] >> 1;
-    int sineY   = sin512LookupTable[rotationY] >> 1;
-    int cosineY = cos512LookupTable[rotationY] >> 1;
-    int sineZ   = sin512LookupTable[rotationZ] >> 1;
-    int cosineZ = cos512LookupTable[rotationZ] >> 1;
+    int sineX   = Sin512(rotationX) >> 1;
+    int cosineX = Cos512(rotationX) >> 1;
+    int sineY   = Sin512(rotationY) >> 1;
+    int cosineY = Cos512(rotationY) >> 1;
+    int sineZ   = Sin512(rotationZ) >> 1;
+    int cosineZ = Cos512(rotationZ) >> 1;
 
     matrix->values[0][0] = (sineZ * (sineY * sineX >> 8) >> 8) + (cosineZ * cosineY >> 8);
     matrix->values[0][1] = (sineZ * cosineY >> 8) - (cosineZ * (sineY * sineX >> 8) >> 8);

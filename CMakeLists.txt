@@ -22,7 +22,6 @@ set(RETRO_OUTPUT_NAME ${RETRO_NAME} CACHE STRING "The exported name of the execu
 
 set(RETRO_FILES
     dependencies/all/tinyxml2/tinyxml2.cpp
-    dependencies/all/theoraplay/theoraplay.c
     RSDKv3/Animation.cpp
     RSDKv3/Audio.cpp
     RSDKv3/Collision.cpp
@@ -62,6 +61,10 @@ if(NOT PLATFORM)
 endif()
 
 include(platforms/${PLATFORM}.cmake)
+
+if(NOT RETRO_USE_PSP_NATIVE)
+    target_sources(RetroEngine PRIVATE dependencies/all/theoraplay/theoraplay.c)
+endif()
 
 set_target_properties(RetroEngine PROPERTIES OUTPUT_NAME ${RETRO_OUTPUT_NAME})
 
@@ -176,10 +179,15 @@ if(DEFINED DEP_PATH)
 endif()
 
 
+if(NOT RETRO_USE_PSP_NATIVE)
+    target_compile_definitions(RetroEngine PRIVATE
+        RETRO_USE_SDL${RETRO_SDL_VERSION}=1
+    )
+endif()
+
 target_compile_definitions(RetroEngine PRIVATE
     RETRO_USE_MOD_LOADER=$<BOOL:${RETRO_MOD_LOADER}>
     RETRO_USING_OPENGL=$<BOOL:${RETRO_USE_HW_RENDER}>
-    RETRO_USE_SDL${RETRO_SDL_VERSION}=1
     FORCE_CASE_INSENSITIVE=$<BOOL:${RETRO_FORCE_CASE_INSENSITIVE}>
     RETRO_USE_ORIGINAL_CODE=$<BOOL:${RETRO_ORIGINAL_CODE}>
     

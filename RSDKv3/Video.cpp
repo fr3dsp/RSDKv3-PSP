@@ -7,9 +7,11 @@ int videoWidth        = 0;
 int videoHeight       = 0;
 float videoAR         = 0;
 
+#if !RETRO_USING_PSP
 THEORAPLAY_Decoder *videoDecoder;
 const THEORAPLAY_VideoFrame *videoVidData;
 THEORAPLAY_Io callbacks;
+#endif
 
 byte videoSurface = 0;
 int videoFilePos  = 0;
@@ -18,6 +20,26 @@ int vidFrameMS    = 0;
 int vidBaseticks  = 0;
 
 bool videoSkipped = false;
+
+#if RETRO_USING_PSP
+void PlayVideoFile(char *filePath)
+{
+    PrintLog("Video playback not supported on PSP");
+}
+
+void UpdateVideoFrame() {}
+
+int ProcessVideo()
+{
+    return 1;
+}
+
+void StopVideoPlayback() {}
+
+void SetupVideoBuffer(int width, int height) {}
+
+void CloseVideoBuffer() {}
+#else
 
 static long videoRead(THEORAPLAY_Io *io, void *buf, long buflen)
 {
@@ -356,3 +378,4 @@ void CloseVideoBuffer()
 #endif
     }
 }
+#endif

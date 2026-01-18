@@ -1183,13 +1183,13 @@ void SetLayerDeformation(int selectedDef, int waveLength, int waveWidth, int wav
     if (waveType == 1) {
         id = YPos;
         for (int i = 0; i < waveSize; ++i) {
-            deformPtr[id] = waveWidth * sin512LookupTable[(i << 9) / waveLength & 0x1FF] >> shift;
+            deformPtr[id] = waveWidth * Sin512((i << 9) / waveLength & 0x1FF) >> shift;
             ++id;
         }
     }
     else {
         for (int i = 0; i < 0x200 * 0x100; i += 0x200) {
-            int val       = waveWidth * sin512LookupTable[i / waveLength & 0x1FF] >> shift;
+            int val       = waveWidth * Sin512(i / waveLength & 0x1FF) >> shift;
             deformPtr[id] = val;
             if (deformPtr[id] >= waveWidth && renderType == RENDER_SW)
                 deformPtr[id] = waveWidth - 1;

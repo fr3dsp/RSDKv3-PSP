@@ -111,6 +111,17 @@ typedef unsigned int uint;
 #define DEFAULT_FULLSCREEN   false
 #endif
 
+#ifndef RETRO_USE_PSP_NATIVE
+#define RETRO_USE_PSP_NATIVE (0)
+#endif
+
+#if RETRO_PLATFORM == RETRO_PSP && RETRO_USE_PSP_NATIVE
+#define RETRO_USING_SDL1 (0)
+#define RETRO_USING_SDL2 (0)
+#define RETRO_USING_PSP  (1)
+#else
+#define RETRO_USING_PSP  (0)
+
 #if !defined(RETRO_USE_SDL2) && !defined(RETRO_USE_SDL1)
 #define RETRO_USE_SDL2 (1)
 #endif
@@ -127,6 +138,7 @@ typedef unsigned int uint;
 #else // Since its an else & not an elif these platforms probably aren't supported yet
 #define RETRO_USING_SDL1 (0)
 #define RETRO_USING_SDL2 (0)
+#endif
 #endif
 
 #if RETRO_PLATFORM == RETRO_iOS || RETRO_PLATFORM == RETRO_ANDROID || RETRO_PLATFORM == RETRO_WP7
@@ -366,7 +378,11 @@ enum RetroBytecodeFormat {
 #include <theora/theora.h>
 #include <theoraplay.h>
 #elif RETRO_PLATFORM == RETRO_PSP
+#if RETRO_USING_PSP
+#include "PspPlatform.hpp"
+#else
 #include <SDL2/SDL.h>
+#endif
 #include <vorbis/vorbisfile.h>
 #elif RETRO_PLATFORM == RETRO_OSX
 #include <SDL2/SDL.h>
@@ -588,6 +604,9 @@ public:
     SDL_Surface *videoBuffer    = nullptr;
 
     SDL_Event sdlEvents;
+#endif
+
+#if RETRO_USING_PSP
 #endif
 };
 

@@ -1070,13 +1070,13 @@ void ProcessPathGrip(Player *player)
 
     while (checkDist > -1) {
         if (checkDist >= 1) {
-            cosValue256 = cos256LookupTable[player->angle] << 10;
-            sinValue256 = sin256LookupTable[player->angle] << 10;
+            cosValue256 = Cos256(player->angle) << 10;
+            sinValue256 = Sin256(player->angle) << 10;
             checkDist--;
         }
         else {
-            cosValue256 = absSpeed * cos256LookupTable[player->angle] >> 8;
-            sinValue256 = absSpeed * sin256LookupTable[player->angle] >> 8;
+            cosValue256 = absSpeed * Cos256(player->angle) >> 8;
+            sinValue256 = absSpeed * Sin256(player->angle) >> 8;
             checkDist   = -1;
         }
 
@@ -1347,8 +1347,8 @@ void ProcessPathGrip(Player *player)
             }
             player->gravity       = 1;
             player->collisionMode = CMODE_FLOOR;
-            player->XVelocity     = cos256LookupTable[player->angle] * player->speed >> 8;
-            player->YVelocity     = sin256LookupTable[player->angle] * player->speed >> 8;
+            player->XVelocity     = Cos256(player->angle) * player->speed >> 8;
+            player->YVelocity     = Sin256(player->angle) * player->speed >> 8;
             if (player->YVelocity < -0x100000)
                 player->YVelocity = -0x100000;
 
@@ -1378,8 +1378,8 @@ void ProcessPathGrip(Player *player)
             if (!sensors[0].collided && !sensors[1].collided && !sensors[2].collided) {
                 player->gravity       = 1;
                 player->collisionMode = CMODE_FLOOR;
-                player->XVelocity     = cos256LookupTable[player->angle] * player->speed >> 8;
-                player->YVelocity     = sin256LookupTable[player->angle] * player->speed >> 8;
+                player->XVelocity     = Cos256(player->angle) * player->speed >> 8;
+                player->YVelocity     = Sin256(player->angle) * player->speed >> 8;
                 if (player->YVelocity < -1048576) {
                     player->YVelocity = -1048576;
                 }
@@ -1419,8 +1419,8 @@ void ProcessPathGrip(Player *player)
             if (!sensors[0].collided && !sensors[1].collided && !sensors[2].collided) {
                 player->gravity       = 1;
                 player->collisionMode = CMODE_FLOOR;
-                player->XVelocity     = cos256LookupTable[player->angle] * player->speed >> 8;
-                player->YVelocity     = sin256LookupTable[player->angle] * player->speed >> 8;
+                player->XVelocity     = Cos256(player->angle) * player->speed >> 8;
+                player->YVelocity     = Sin256(player->angle) * player->speed >> 8;
                 player->flailing[0]   = 0;
                 player->flailing[1]   = 0;
                 player->flailing[2]   = 0;
@@ -1487,8 +1487,8 @@ void ProcessPathGrip(Player *player)
             if (!sensors[0].collided && !sensors[1].collided && !sensors[2].collided) {
                 player->gravity       = 1;
                 player->collisionMode = CMODE_FLOOR;
-                player->XVelocity     = cos256LookupTable[player->angle] * player->speed >> 8;
-                player->YVelocity     = sin256LookupTable[player->angle] * player->speed >> 8;
+                player->XVelocity     = Cos256(player->angle) * player->speed >> 8;
+                player->YVelocity     = Sin256(player->angle) * player->speed >> 8;
                 if (player->YVelocity < -0x100000)
                     player->YVelocity = -0x100000;
 

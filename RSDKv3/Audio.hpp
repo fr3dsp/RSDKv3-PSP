@@ -5,11 +5,20 @@
 
 #include <vorbis/vorbisfile.h>
 
-#if RETRO_PLATFORM != RETRO_VITA && RETRO_PLATFORM != RETRO_OSX
+#if RETRO_USING_PSP
+typedef short Sint16;
+typedef int Sint32;
+typedef unsigned char Uint8;
+#elif RETRO_PLATFORM != RETRO_VITA && RETRO_PLATFORM != RETRO_OSX
 #include "SDL.h"
 #endif
 
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP
+
+#define LockAudioDevice()   ;
+#define UnlockAudioDevice() ;
+
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
 
 #define LockAudioDevice()   SDL_LockAudio()
 #define UnlockAudioDevice() SDL_UnlockAudio()
@@ -39,10 +48,12 @@ struct TrackInfo {
 struct StreamInfo {
     OggVorbis_File vorbisFile;
     int vorbBitstream;
-#if RETRO_USING_SDL1
+#if RETRO_USING_PSP
+    int sampleRate;
+    int channels;
+#elif RETRO_USING_SDL1
     SDL_AudioSpec spec;
-#endif
-#if RETRO_USING_SDL2
+#elif RETRO_USING_SDL2
     SDL_AudioStream *stream;
 #endif
     Sint16 buffer[MIX_BUFFER_SAMPLES];
@@ -110,7 +121,21 @@ extern SDL_AudioSpec audioDeviceFormat;
 int InitAudioPlayback();
 void LoadGlobalSfx();
 
-#if RETRO_USING_SDL1 || RETRO_USING_SDL2
+#if RETRO_USING_PSP
+void ProcessMusicStream(Sint32 *stream, size_t bytes_wanted);
+void ProcessAudioPlayback(void *buffer, unsigned int samples, void *userdata);
+void ProcessAudioMixing(Sint32 *dst, const Sint16 *src, int len, int volume, sbyte pan);
+
+inline void FreeMusInfo()
+{
+    LockAudioDevice();
+    ov_clear(&streamInfo[currentStreamIndex].vorbisFile);
+    if (streamFile[currentStreamIndex].buffer)
+        free(streamFile[currentStreamIndex].buffer);
+    streamFile[currentStreamIndex].buffer = NULL;
+    UnlockAudioDevice();
+}
+#elif RETRO_USING_SDL1 || RETRO_USING_SDL2
 void ProcessMusicStream(void *data, Sint16 *stream, int len);
 void ProcessAudioPlayback(void *data, Uint8 *stream, int len);
 void ProcessAudioMixing(Sint32 *dst, const Sint16 *src, int len, int volume, sbyte pan);
