@@ -80,4 +80,6 @@ target_compile_definitions(RetroEngine PRIVATE RETRO_DISABLE_LOG=1)
 target_link_libraries(RetroEngine m)
 
 create_pbp_file(TARGET RetroEngine
-    TITLE "Sonic CD")
+    TITLE "Sonic CD"
+    ICON_PATH ../psp/ICON0.png
+    BACKGROUND_PATH ../psp/PIC1.png)
