@@ -93,6 +93,7 @@ int main(int argc, char *argv[])
 {
 #if RETRO_PLATFORM == RETRO_PSP
     pspSetupCallbacks();
+    scePowerSetClockFrequency(333, 333, 166);
 #endif
 
 #if !RETRO_USE_ORIGINAL_CODE
