@@ -3,6 +3,11 @@
 #include <algorithm>
 #include <vector>
 
+#if RETRO_PLATFORM == RETRO_PSP
+#include <pspctrl.h>
+extern volatile bool pspSuspended;
+#endif
+
 InputData keyPress = InputData();
 InputData keyDown  = InputData();
 
@@ -162,6 +167,11 @@ int lastMouseY     = 0;
 
 #if RETRO_USING_SDL2
 std::vector<SDL_GameController *> controllers;
+#endif
+
+#if RETRO_PLATFORM == RETRO_PSP
+static bool pspCtrlInitialized = false;
+static SceCtrlData pspPad;
 #endif
 
 #if RETRO_USING_SDL1
@@ -329,17 +339,30 @@ bool getControllerButton(byte buttonID)
 }
 #endif //! RETRO_USING_SDL2
 
+#if RETRO_PLATFORM == RETRO_PSP
+void pspControllerInit() {
+    if (!pspCtrlInitialized) {
+        sceCtrlSetSamplingCycle(0);
+        sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+        pspCtrlInitialized = true;
+    }
+}
+#endif
+
 void ControllerInit(byte controllerID)
 {
+    #if RETRO_PLATFORM != RETRO_PSP
     SDL_GameController *controller = SDL_GameControllerOpen(controllerID);
     if (controller) {
         controllers.push_back(controller);
         inputType = 1;
     }
+    #endif
 }
 
 void ControllerClose(byte controllerID)
 {
+    #if RETRO_PLATFORM != RETRO_PSP
     SDL_GameController *controller = SDL_GameControllerFromInstanceID(controllerID);
     if (controller) {
         SDL_GameControllerClose(controller);
@@ -349,11 +372,104 @@ void ControllerClose(byte controllerID)
     if (controllers.empty()) {
         inputType = 0;
     }
+    #endif
 }
 
 void ProcessInput()
 {
-#if RETRO_USING_SDL2
+#if RETRO_PLATFORM == RETRO_PSP
+    if (pspSuspended) {
+        for (int i = 0; i < INPUT_BUTTONCOUNT; i++) {
+            if (inputDevice[i].hold)
+                inputDevice[i].setReleased();
+        }
+        return;
+    }
+    
+    pspControllerInit();
+    sceCtrlReadBufferPositive(&pspPad, 1);
+    
+    bool anyPressed = false;
+    
+    if (pspPad.Buttons & PSP_CTRL_UP) {
+        inputDevice[INPUT_UP].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_UP].hold) {
+        inputDevice[INPUT_UP].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_DOWN) {
+        inputDevice[INPUT_DOWN].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_DOWN].hold) {
+        inputDevice[INPUT_DOWN].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_LEFT) {
+        inputDevice[INPUT_LEFT].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_LEFT].hold) {
+        inputDevice[INPUT_LEFT].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_RIGHT) {
+        inputDevice[INPUT_RIGHT].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_RIGHT].hold) {
+        inputDevice[INPUT_RIGHT].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_CROSS) {
+        inputDevice[INPUT_BUTTONA].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_BUTTONA].hold) {
+        inputDevice[INPUT_BUTTONA].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_CIRCLE) {
+        inputDevice[INPUT_BUTTONB].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_BUTTONB].hold) {
+        inputDevice[INPUT_BUTTONB].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_SQUARE) {
+        inputDevice[INPUT_BUTTONC].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_BUTTONC].hold) {
+        inputDevice[INPUT_BUTTONC].setReleased();
+    }
+    
+    if (pspPad.Buttons & PSP_CTRL_START) {
+        inputDevice[INPUT_START].setHeld();
+        anyPressed = true;
+    } else if (inputDevice[INPUT_START].hold) {
+        inputDevice[INPUT_START].setReleased();
+    }
+    
+    if (pspPad.Lx < 64 && !inputDevice[INPUT_LEFT].hold) {
+        inputDevice[INPUT_LEFT].setHeld();
+        anyPressed = true;
+    }
+    if (pspPad.Lx > 192 && !inputDevice[INPUT_RIGHT].hold) {
+        inputDevice[INPUT_RIGHT].setHeld();
+        anyPressed = true;
+    }
+    if (pspPad.Ly < 64 && !inputDevice[INPUT_UP].hold) {
+        inputDevice[INPUT_UP].setHeld();
+        anyPressed = true;
+    }
+    if (pspPad.Ly > 192 && !inputDevice[INPUT_DOWN].hold) {
+        inputDevice[INPUT_DOWN].setHeld();
+        anyPressed = true;
+    }
+    
+    if (anyPressed) {
+        inputDevice[INPUT_ANY].setHeld();
+    } else {
+        inputDevice[INPUT_ANY].setReleased();
+    }
+#elif RETRO_USING_SDL2
     int length           = 0;
     const byte *keyState = SDL_GetKeyboardState(&length);
 
