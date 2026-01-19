@@ -21,8 +21,80 @@ byte modObjCount = 0;
 char playerNames[PLAYERNAME_COUNT][0x20];
 byte playerCount = 0;
 
-#include <filesystem>
 #include <algorithm>
+
+#if RETRO_PLATFORM == RETRO_PSP
+#include <pspiofilemgr.h>
+#include <cstring>
+#include <string>
+
+struct PspDirEntry {
+    std::string name;
+    bool isDirectory;
+};
+
+bool pspDirectoryExists(const char* path) {
+    SceUID dir = sceIoDopen(path);
+    if (dir >= 0) {
+        sceIoDclose(dir);
+        return true;
+    }
+    return false;
+}
+
+bool pspFileExists(const char* path) {
+    SceIoStat stat;
+    return sceIoGetstat(path, &stat) >= 0;
+}
+
+std::vector<PspDirEntry> pspScanDirectory(const char* path) {
+    std::vector<PspDirEntry> entries;
+    SceUID dir = sceIoDopen(path);
+    if (dir >= 0) {
+        SceIoDirent dirent;
+        while (sceIoDread(dir, &dirent) > 0) {
+            if (strcmp(dirent.d_name, ".") == 0 || strcmp(dirent.d_name, "..") == 0)
+                continue;
+            PspDirEntry entry;
+            entry.name = dirent.d_name;
+            entry.isDirectory = FIO_S_ISDIR(dirent.d_stat.st_mode);
+            entries.push_back(entry);
+        }
+        sceIoDclose(dir);
+    }
+    return entries;
+}
+
+void pspScanDirectoryRecursive(const char* basePath, std::vector<std::string>& files) {
+    SceUID dir = sceIoDopen(basePath);
+    if (dir >= 0) {
+        SceIoDirent dirent;
+        while (sceIoDread(dir, &dirent) > 0) {
+            if (strcmp(dirent.d_name, ".") == 0 || strcmp(dirent.d_name, "..") == 0)
+                continue;
+            
+            char fullPath[0x200];
+            sprintf(fullPath, "%s/%s", basePath, dirent.d_name);
+            
+            if (FIO_S_ISDIR(dirent.d_stat.st_mode)) {
+                pspScanDirectoryRecursive(fullPath, files);
+            } else {
+                files.push_back(std::string(fullPath));
+            }
+        }
+        sceIoDclose(dir);
+    }
+}
+
+#else
+#include <filesystem>
+
+#if RETRO_PLATFORM == RETRO_ANDROID
+namespace fs = std::__fs::filesystem;
+#else
+namespace fs = std::filesystem;
+#endif
+#endif
 
 int OpenModMenu()
 {
@@ -31,12 +103,83 @@ int OpenModMenu()
     return 1;
 }
 
-#if RETRO_PLATFORM == RETRO_ANDROID
-namespace fs = std::__fs::filesystem;
-#else
-namespace fs = std::filesystem;
-#endif
+#if RETRO_PLATFORM == RETRO_PSP
+void InitMods()
+{
+    modList.clear();
+    forceUseScripts        = forceUseScripts_Config;
+    disableFocusPause      = disableFocusPause_Config;
+    redirectSave           = false;
+    disableSaveIniOverride = false;
+    sprintf(savePath, "");
 
+    char modBuf[0x100];
+    sprintf(modBuf, "%smods", modsPath);
+
+    if (pspDirectoryExists(modBuf)) {
+        char configPath[0x100];
+        sprintf(configPath, "%s/modconfig.ini", modBuf);
+        
+        FileIO *configFile = fOpen(configPath, "r");
+        if (configFile) {
+            fClose(configFile);
+            IniParser modConfig(configPath, false);
+
+            for (int m = 0; m < (int)modConfig.items.size(); ++m) {
+                bool active = false;
+                ModInfo info;
+                modConfig.GetBool("mods", modConfig.items[m].key, &active);
+                if (LoadMod(&info, std::string(modBuf), modConfig.items[m].key, active))
+                    modList.push_back(info);
+            }
+        }
+
+        std::vector<PspDirEntry> entries = pspScanDirectory(modBuf);
+        for (size_t i = 0; i < entries.size(); i++) {
+            if (entries[i].isDirectory) {
+                std::string folder = entries[i].name;
+
+                bool flag = true;
+                for (int m = 0; m < (int)modList.size(); ++m) {
+                    if (modList[m].folder == folder) {
+                        flag = false;
+                        break;
+                    }
+                }
+
+                if (flag) {
+                    ModInfo info;
+                    if (LoadMod(&info, std::string(modBuf), folder, false))
+                        modList.push_back(info);
+                }
+            }
+        }
+    }
+
+    disableFocusPause = disableFocusPause_Config;
+    forceUseScripts   = forceUseScripts_Config;
+    sprintf(savePath, "");
+    redirectSave           = false;
+    disableSaveIniOverride = false;
+    for (int m = 0; m < (int)modList.size(); ++m) {
+        if (!modList[m].active)
+            continue;
+        if (modList[m].useScripts)
+            forceUseScripts = true;
+        if (modList[m].disableFocusPause)
+            disableFocusPause |= modList[m].disableFocusPause;
+        if (modList[m].redirectSave) {
+            sprintf(savePath, "%s", modList[m].savePath.c_str());
+            redirectSave = true;
+        }
+        if (modList[m].disableSaveIniOverride)
+            disableSaveIniOverride = true;
+    }
+
+    ReadSaveRAMData();
+    ReadUserdata();
+}
+#else
 fs::path ResolvePath(fs::path given)
 {
     if (given.is_relative())
@@ -142,6 +285,7 @@ void InitMods()
     ReadSaveRAMData();
     ReadUserdata();
 }
+#endif
 
 bool LoadMod(ModInfo *info, std::string modsPath, std::string folder, bool active)
 {
@@ -193,7 +337,9 @@ bool LoadMod(ModInfo *info, std::string modsPath, std::string folder, bool activ
 
         info->active = active;
 
-        ScanModFolder(info);
+        if (active) {
+            ScanModFolder(info);
+        }
 
         info->useScripts = false;
         modSettings.GetBool("", "TxtScripts", &info->useScripts);
@@ -223,6 +369,69 @@ bool LoadMod(ModInfo *info, std::string modsPath, std::string folder, bool activ
     return false;
 }
 
+#if RETRO_PLATFORM == RETRO_PSP
+void pspAddFilesToModMap(ModInfo *info, const char* basePath, const char* folderName) {
+    char searchPath[0x200];
+    sprintf(searchPath, "%s/%s", basePath, folderName);
+    
+    if (!pspDirectoryExists(searchPath))
+        return;
+    
+    std::vector<std::string> files;
+    pspScanDirectoryRecursive(searchPath, files);
+    
+    char folderTest[2][0x20];
+    sprintf(folderTest[0], "%s/", folderName);
+    sprintf(folderTest[1], "%s\\", folderName);
+    
+    for (size_t i = 0; i < files.size(); i++) {
+        char modBuf[0x200];
+        StrCopy(modBuf, files[i].c_str());
+        
+        int tokenPos = -1;
+        for (int t = 0; t < 2; ++t) {
+            tokenPos = FindStringToken(modBuf, folderTest[t], 1);
+            if (tokenPos >= 0)
+                break;
+        }
+
+        if (tokenPos >= 0) {
+            char buffer[0x200];
+            for (int j = StrLength(modBuf); j >= tokenPos; --j) {
+                buffer[j - tokenPos] = modBuf[j] == '\\' ? '/' : modBuf[j];
+            }
+
+            char pathLower[0x200];
+            memset(pathLower, 0, sizeof(pathLower));
+            for (int c = 0; buffer[c]; ++c) {
+                pathLower[c] = tolower(buffer[c]);
+            }
+
+            info->fileMap.insert(std::pair<std::string, std::string>(pathLower, modBuf));
+        }
+    }
+}
+
+void ScanModFolder(ModInfo *info)
+{
+    if (!info)
+        return;
+
+    char modBuf[0x100];
+    sprintf(modBuf, "%smods", modsPath);
+    
+    char modDir[0x200];
+    sprintf(modDir, "%s/%s", modBuf, info->folder.c_str());
+
+    pspAddFilesToModMap(info, modDir, "Data");
+    pspAddFilesToModMap(info, modDir, "Scripts");
+    pspAddFilesToModMap(info, modDir, "Videos");    
+    char dataDir[0x200];
+    sprintf(dataDir, "%s/Data", modDir);
+    pspAddFilesToModMap(info, dataDir, "Scripts");
+    pspAddFilesToModMap(info, dataDir, "Videos");
+}
+#else
 void ScanModFolder(ModInfo *info)
 {
     if (!info)
@@ -379,7 +588,28 @@ void ScanModFolder(ModInfo *info)
         }
     }
 }
+#endif
 
+#if RETRO_PLATFORM == RETRO_PSP
+void SaveMods()
+{
+    char modBuf[0x100];
+    sprintf(modBuf, "%smods", modsPath);
+
+    if (pspDirectoryExists(modBuf)) {
+        char configPath[0x200];
+        sprintf(configPath, "%s/modconfig.ini", modBuf);
+        IniParser modConfig;
+
+        for (int m = 0; m < (int)modList.size(); ++m) {
+            ModInfo *info = &modList[m];
+            modConfig.SetBool("mods", info->folder.c_str(), info->active);
+        }
+
+        modConfig.Write(configPath, false);
+    }
+}
+#else
 void SaveMods()
 {
     char modBuf[0x100];
@@ -399,6 +629,7 @@ void SaveMods()
         modConfig.Write(mod_config.c_str(), false);
     }
 }
+#endif
 
 void RefreshEngine()
 {

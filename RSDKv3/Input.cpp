@@ -447,6 +447,20 @@ void ProcessInput()
         inputDevice[INPUT_START].setReleased();
     }
     
+    static bool selectWasPressed = false;
+    if (pspPad.Buttons & PSP_CTRL_SELECT) {
+        if (!selectWasPressed) {
+            selectWasPressed = true;
+            if (Engine.devMenu) {
+                if (Engine.gameMode == ENGINE_MAINGAME) {
+                    Engine.gameMode = ENGINE_INITDEVMENU;
+                }
+            }
+        }
+    } else {
+        selectWasPressed = false;
+    }
+    
     if (pspPad.Lx < 64 && !inputDevice[INPUT_LEFT].hold) {
         inputDevice[INPUT_LEFT].setHeld();
         anyPressed = true;

@@ -75,7 +75,7 @@ if(NOT GAME_STATIC)
     message(FATAL_ERROR "GAME_STATIC must be on")
 endif()
 
-set(RETRO_MOD_LOADER OFF CACHE BOOL "Disable the mod loader" FORCE)
+set(RETRO_MOD_LOADER ON CACHE BOOL "Enable the mod loader" FORCE)
 set(RETRO_USE_HW_RENDER OFF CACHE BOOL "Disable hardware rendering on PSP" FORCE)
 
 if(RETRO_MOD_LOADER)
@@ -89,8 +89,6 @@ target_compile_options(RetroEngine PRIVATE
     -O3
     -ffast-math
     -fomit-frame-pointer
-    -fno-exceptions
-    -fno-rtti
     -finline-functions
     -funroll-loops
     -march=allegrex
