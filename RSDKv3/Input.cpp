@@ -419,32 +419,75 @@ void ProcessInput()
         inputDevice[INPUT_RIGHT].setReleased();
     }
     
-    if (pspPad.Buttons & PSP_CTRL_CROSS) {
-        inputDevice[INPUT_BUTTONA].setHeld();
-        anyPressed = true;
-    } else if (inputDevice[INPUT_BUTTONA].hold) {
-        inputDevice[INPUT_BUTTONA].setReleased();
-    }
-    
-    if (pspPad.Buttons & PSP_CTRL_CIRCLE) {
-        inputDevice[INPUT_BUTTONB].setHeld();
-        anyPressed = true;
-    } else if (inputDevice[INPUT_BUTTONB].hold) {
-        inputDevice[INPUT_BUTTONB].setReleased();
-    }
-    
-    if (pspPad.Buttons & PSP_CTRL_SQUARE) {
-        inputDevice[INPUT_BUTTONC].setHeld();
-        anyPressed = true;
-    } else if (inputDevice[INPUT_BUTTONC].hold) {
-        inputDevice[INPUT_BUTTONC].setReleased();
-    }
-    
-    if (pspPad.Buttons & PSP_CTRL_START) {
-        inputDevice[INPUT_START].setHeld();
-        anyPressed = true;
-    } else if (inputDevice[INPUT_START].hold) {
-        inputDevice[INPUT_START].setReleased();
+    if (Engine.bytecodeMode == BYTECODE_MOBILE) {
+        if (pspPad.Buttons & PSP_CTRL_CROSS) {
+            inputDevice[INPUT_BUTTONA].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_BUTTONA].hold) {
+            inputDevice[INPUT_BUTTONA].setReleased();
+        }
+        
+        if (pspPad.Buttons & PSP_CTRL_CIRCLE) {
+            inputDevice[INPUT_BUTTONA].setHeld();
+            anyPressed = true;
+        }
+        
+        if (pspPad.Buttons & PSP_CTRL_SQUARE) {
+            inputDevice[INPUT_BUTTONC].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_BUTTONC].hold) {
+            inputDevice[INPUT_BUTTONC].setReleased();
+        }
+        
+        static bool pspStartTouchActive = false;
+        if (pspPad.Buttons & PSP_CTRL_START) {
+            inputDevice[INPUT_START].setHeld();
+            anyPressed = true;
+            if (!pspStartTouchActive) {
+                touchDown[0] = true;
+                touchX[0] = SCREEN_XSIZE - 50;
+                touchY[0] = 16;
+                touches = 1;
+                pspStartTouchActive = true;
+            }
+        } else {
+            if (pspStartTouchActive) {
+                touchDown[0] = false;
+                touches = 0;
+                pspStartTouchActive = false;
+            }
+            if (inputDevice[INPUT_START].hold) {
+                inputDevice[INPUT_START].setReleased();
+            }
+        }
+    } else {
+        if (pspPad.Buttons & PSP_CTRL_CROSS) {
+            inputDevice[INPUT_BUTTONA].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_BUTTONA].hold) {
+            inputDevice[INPUT_BUTTONA].setReleased();
+        }
+        
+        if (pspPad.Buttons & PSP_CTRL_CIRCLE) {
+            inputDevice[INPUT_BUTTONB].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_BUTTONB].hold) {
+            inputDevice[INPUT_BUTTONB].setReleased();
+        }
+        
+        if (pspPad.Buttons & PSP_CTRL_SQUARE) {
+            inputDevice[INPUT_BUTTONC].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_BUTTONC].hold) {
+            inputDevice[INPUT_BUTTONC].setReleased();
+        }
+        
+        if (pspPad.Buttons & PSP_CTRL_START) {
+            inputDevice[INPUT_START].setHeld();
+            anyPressed = true;
+        } else if (inputDevice[INPUT_START].hold) {
+            inputDevice[INPUT_START].setReleased();
+        }
     }
     
     static bool selectWasPressed = false;
