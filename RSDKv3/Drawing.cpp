@@ -6775,10 +6775,20 @@ void DrawFace(void *v, uint colour)
                     ushort *fbPtr = &frameBufferPtr[startX];
                     frameBufferPtr += GFX_LINESIZE;
                     int vertexwidth = endX - startX + 1;
+#if RETRO_USING_PSP
+                    uint colour32 = colour16 | (colour16 << 16);
+                    while (vertexwidth >= 2) {
+                        *(uint*)fbPtr = colour32;
+                        fbPtr += 2;
+                        vertexwidth -= 2;
+                    }
+                    if (vertexwidth > 0) *fbPtr = colour16;
+#else
                     while (vertexwidth--) {
                         *fbPtr = colour16;
                         ++fbPtr;
                     }
+#endif
                 }
                 ++faceTop;
             }
@@ -6975,6 +6985,32 @@ void DrawTexturedFace(void *v, byte sheetID)
                 ushort *fbPtr = &frameBufferPtr[startX];
                 frameBufferPtr += GFX_LINESIZE;
                 int counter = posDifference + 1;
+#if RETRO_USING_PSP
+                int UPos2 = UPos;
+                int VPos2 = VPos;
+                while (counter >= 2) {
+                    int u1 = UPos2 >> 16; if (u1 < 0) u1 = 0;
+                    int v1 = VPos2 >> 16; if (v1 < 0) v1 = 0;
+                    ushort idx1 = sheetPtr[(v1 << shiftwidth) + u1];
+                    UPos2 += bufferedUPos;
+                    VPos2 += bufferedVPos;
+                    int u2 = UPos2 >> 16; if (u2 < 0) u2 = 0;
+                    int v2 = VPos2 >> 16; if (v2 < 0) v2 = 0;
+                    ushort idx2 = sheetPtr[(v2 << shiftwidth) + u2];
+                    UPos2 += bufferedUPos;
+                    VPos2 += bufferedVPos;
+                    if (idx1 > 0) fbPtr[0] = activePalette[idx1];
+                    if (idx2 > 0) fbPtr[1] = activePalette[idx2];
+                    fbPtr += 2;
+                    counter -= 2;
+                }
+                if (counter > 0) {
+                    int u1 = UPos2 >> 16; if (u1 < 0) u1 = 0;
+                    int v1 = VPos2 >> 16; if (v1 < 0) v1 = 0;
+                    ushort idx1 = sheetPtr[(v1 << shiftwidth) + u1];
+                    if (idx1 > 0) *fbPtr = activePalette[idx1];
+                }
+#else
                 while (counter--) {
                     if (UPos < 0)
                         UPos = 0;
@@ -6987,6 +7023,7 @@ void DrawTexturedFace(void *v, byte sheetID)
                     UPos += bufferedUPos;
                     VPos += bufferedVPos;
                 }
+#endif
             }
             ++faceTop;
         }

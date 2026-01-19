@@ -93,6 +93,10 @@ target_compile_options(RetroEngine PRIVATE
     -fno-rtti
     -finline-functions
     -funroll-loops
+    -march=allegrex
+    -mtune=allegrex
+    -mno-check-zero-division
+    -fsingle-precision-constant
 )
 
 target_compile_definitions(RetroEngine PRIVATE RETRO_DISABLE_LOG=1)

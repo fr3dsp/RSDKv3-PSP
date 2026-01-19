@@ -1,4 +1,5 @@
 #include "RetroEngine.hpp"
+#include <cstdlib>
 
 int vertexCount = 0;
 int faceCount   = 0;
@@ -46,16 +47,18 @@ void SetIdentityMatrix(Matrix *matrix)
 }
 void MatrixMultiply(Matrix *matrixA, Matrix *matrixB)
 {
-    int output[16];
+    int output[4][4];
+    int (*a)[4] = matrixA->values;
+    int (*b)[4] = matrixB->values;
 
-    for (int i = 0; i < 0x10; ++i) {
-        uint RowB = i & 3;
-        uint RowA = (i & 0xC) / 4;
-        output[i] = (matrixA->values[RowA][3] * matrixB->values[3][RowB] >> 8) + (matrixA->values[RowA][2] * matrixB->values[2][RowB] >> 8)
-                    + (matrixA->values[RowA][1] * matrixB->values[1][RowB] >> 8) + (matrixA->values[RowA][0] * matrixB->values[0][RowB] >> 8);
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            output[row][col] = (a[row][0] * b[0][col] >> 8) + (a[row][1] * b[1][col] >> 8)
+                             + (a[row][2] * b[2][col] >> 8) + (a[row][3] * b[3][col] >> 8);
+        }
     }
 
-    for (int i = 0; i < 0x10; ++i) matrixA->values[i / 4][i % 4] = output[i];
+    memcpy(matrixA->values, output, sizeof(output));
 }
 void MatrixTranslateXYZ(Matrix *matrix, int x, int y, int z)
 {
@@ -204,44 +207,49 @@ void MatrixRotateXYZ(Matrix *matrix, int rotationX, int rotationY, int rotationZ
 }
 void TransformVertexBuffer()
 {
-    for (int y = 0; y < 4; ++y) {
-        for (int x = 0; x < 4; ++x) {
-            matFinal.values[y][x] = matWorld.values[y][x];
-        }
-    }
+    matFinal = matWorld;
     MatrixMultiply(&matFinal, &matView);
 
     if (vertexCount <= 0)
         return;
 
-    int inVertexID  = 0;
-    int outVertexID = 0;
-    do {
-        int vx       = vertexBuffer[inVertexID].x;
-        int vy       = vertexBuffer[inVertexID].y;
-        int vz       = vertexBuffer[inVertexID].z;
-        Vertex *vert = &vertexBufferT[inVertexID++];
+    int m00 = matFinal.values[0][0], m01 = matFinal.values[0][1], m02 = matFinal.values[0][2];
+    int m10 = matFinal.values[1][0], m11 = matFinal.values[1][1], m12 = matFinal.values[1][2];
+    int m20 = matFinal.values[2][0], m21 = matFinal.values[2][1], m22 = matFinal.values[2][2];
+    int m30 = matFinal.values[3][0], m31 = matFinal.values[3][1], m32 = matFinal.values[3][2];
 
-        vert->x = (vx * matFinal.values[0][0] >> 8) + (vy * matFinal.values[1][0] >> 8) + (vz * matFinal.values[2][0] >> 8) + matFinal.values[3][0];
-        vert->y = (vx * matFinal.values[0][1] >> 8) + (vy * matFinal.values[1][1] >> 8) + (vz * matFinal.values[2][1] >> 8) + matFinal.values[3][1];
-        vert->z = (vx * matFinal.values[0][2] >> 8) + (vy * matFinal.values[1][2] >> 8) + (vz * matFinal.values[2][2] >> 8) + matFinal.values[3][2];
-    } while (++outVertexID != vertexCount);
+    Vertex *src = vertexBuffer;
+    Vertex *dst = vertexBufferT;
+    for (int i = 0; i < vertexCount; ++i, ++src, ++dst) {
+        int vx = src->x, vy = src->y, vz = src->z;
+        dst->x = (vx * m00 >> 8) + (vy * m10 >> 8) + (vz * m20 >> 8) + m30;
+        dst->y = (vx * m01 >> 8) + (vy * m11 >> 8) + (vz * m21 >> 8) + m31;
+        dst->z = (vx * m02 >> 8) + (vy * m12 >> 8) + (vz * m22 >> 8) + m32;
+    }
 }
 void TransformVerticies(Matrix *matrix, int startIndex, int endIndex)
 {
-    if (startIndex > endIndex)
+    if (startIndex >= endIndex)
         return;
 
-    do {
-        int vx       = vertexBuffer[startIndex].x;
-        int vy       = vertexBuffer[startIndex].y;
-        int vz       = vertexBuffer[startIndex].z;
-        Vertex *vert = &vertexBuffer[startIndex];
-        vert->x      = (vx * matrix->values[0][0] >> 8) + (vy * matrix->values[1][0] >> 8) + (vz * matrix->values[2][0] >> 8) + matrix->values[3][0];
-        vert->y      = (vx * matrix->values[0][1] >> 8) + (vy * matrix->values[1][1] >> 8) + (vz * matrix->values[2][1] >> 8) + matrix->values[3][1];
-        vert->z      = (vx * matrix->values[0][2] >> 8) + (vy * matrix->values[1][2] >> 8) + (vz * matrix->values[2][2] >> 8) + matrix->values[3][2];
-    } while (++startIndex < endIndex);
+    int m00 = matrix->values[0][0], m01 = matrix->values[0][1], m02 = matrix->values[0][2];
+    int m10 = matrix->values[1][0], m11 = matrix->values[1][1], m12 = matrix->values[1][2];
+    int m20 = matrix->values[2][0], m21 = matrix->values[2][1], m22 = matrix->values[2][2];
+    int m30 = matrix->values[3][0], m31 = matrix->values[3][1], m32 = matrix->values[3][2];
+
+    Vertex *vert = &vertexBuffer[startIndex];
+    for (int i = startIndex; i < endIndex; ++i, ++vert) {
+        int vx = vert->x, vy = vert->y, vz = vert->z;
+        vert->x = (vx * m00 >> 8) + (vy * m10 >> 8) + (vz * m20 >> 8) + m30;
+        vert->y = (vx * m01 >> 8) + (vy * m11 >> 8) + (vz * m21 >> 8) + m31;
+        vert->z = (vx * m02 >> 8) + (vy * m12 >> 8) + (vz * m22 >> 8) + m32;
+    }
 }
+static int CompareDrawList3D(const void *a, const void *b)
+{
+    return ((DrawListEntry3D*)b)->depth - ((DrawListEntry3D*)a)->depth;
+}
+
 void Sort3DDrawList()
 {
     for (int i = 0; i < faceCount; ++i) {
@@ -251,38 +259,34 @@ void Sort3DDrawList()
         drawList3D[i].faceID = i;
     }
 
-    for (int i = 0; i < faceCount; ++i) {
-        for (int j = faceCount - 1; j > i; --j) {
-            if (drawList3D[j].depth > drawList3D[j - 1].depth) {
-                int faceID               = drawList3D[j].faceID;
-                int depth                = drawList3D[j].depth;
-                drawList3D[j].faceID     = drawList3D[j - 1].faceID;
-                drawList3D[j].depth      = drawList3D[j - 1].depth;
-                drawList3D[j - 1].faceID = faceID;
-                drawList3D[j - 1].depth  = depth;
-            }
-        }
-    }
+    qsort(drawList3D, faceCount, sizeof(DrawListEntry3D), CompareDrawList3D);
 }
 void Draw3DScene(int spriteSheetID)
 {
     Vertex quad[4];
+    int pX = projectionX;
+    int pY = projectionY;
+    int cx = SCREEN_CENTERX;
+    int cy = SCREEN_CENTERY;
+    
     for (int i = 0; i < faceCount; ++i) {
         Face *face = &faceBuffer[drawList3D[i].faceID];
-        memset(quad, 0, 4 * sizeof(Vertex));
         switch (face->flags) {
             default: break;
-            case FACE_FLAG_TEXTURED_3D:
-                if (vertexBufferT[face->a].z > 0x100 && vertexBufferT[face->b].z > 0x100 && vertexBufferT[face->c].z > 0x100
-                    && vertexBufferT[face->d].z > 0x100) {
-                    quad[0].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->a].x / vertexBufferT[face->a].z;
-                    quad[0].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->a].y / vertexBufferT[face->a].z;
-                    quad[1].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->b].x / vertexBufferT[face->b].z;
-                    quad[1].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->b].y / vertexBufferT[face->b].z;
-                    quad[2].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->c].x / vertexBufferT[face->c].z;
-                    quad[2].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->c].y / vertexBufferT[face->c].z;
-                    quad[3].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->d].x / vertexBufferT[face->d].z;
-                    quad[3].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->d].y / vertexBufferT[face->d].z;
+            case FACE_FLAG_TEXTURED_3D: {
+                Vertex *va = &vertexBufferT[face->a];
+                Vertex *vb = &vertexBufferT[face->b];
+                Vertex *vc = &vertexBufferT[face->c];
+                Vertex *vd = &vertexBufferT[face->d];
+                if (va->z > 0x100 && vb->z > 0x100 && vc->z > 0x100 && vd->z > 0x100) {
+                    quad[0].x = cx + pX * va->x / va->z;
+                    quad[0].y = cy - pY * va->y / va->z;
+                    quad[1].x = cx + pX * vb->x / vb->z;
+                    quad[1].y = cy - pY * vb->y / vb->z;
+                    quad[2].x = cx + pX * vc->x / vc->z;
+                    quad[2].y = cy - pY * vc->y / vc->z;
+                    quad[3].x = cx + pX * vd->x / vd->z;
+                    quad[3].y = cy - pY * vd->y / vd->z;
                     quad[0].u = vertexBuffer[face->a].u;
                     quad[0].v = vertexBuffer[face->a].v;
                     quad[1].u = vertexBuffer[face->b].u;
@@ -294,6 +298,7 @@ void Draw3DScene(int spriteSheetID)
                     DrawTexturedFace(quad, spriteSheetID);
                 }
                 break;
+            }
             case FACE_FLAG_TEXTURED_2D:
                 quad[0].x = vertexBuffer[face->a].x;
                 quad[0].y = vertexBuffer[face->a].y;
@@ -313,20 +318,24 @@ void Draw3DScene(int spriteSheetID)
                 quad[3].v = vertexBuffer[face->d].v;
                 DrawTexturedFace(quad, spriteSheetID);
                 break;
-            case FACE_FLAG_COLOURED_3D:
-                if (vertexBufferT[face->a].z > 0x100 && vertexBufferT[face->b].z > 0x100 && vertexBufferT[face->c].z > 0x100
-                    && vertexBufferT[face->d].z > 0x100) {
-                    quad[0].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->a].x / vertexBufferT[face->a].z;
-                    quad[0].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->a].y / vertexBufferT[face->a].z;
-                    quad[1].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->b].x / vertexBufferT[face->b].z;
-                    quad[1].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->b].y / vertexBufferT[face->b].z;
-                    quad[2].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->c].x / vertexBufferT[face->c].z;
-                    quad[2].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->c].y / vertexBufferT[face->c].z;
-                    quad[3].x = SCREEN_CENTERX + projectionX * vertexBufferT[face->d].x / vertexBufferT[face->d].z;
-                    quad[3].y = SCREEN_CENTERY - projectionY * vertexBufferT[face->d].y / vertexBufferT[face->d].z;
+            case FACE_FLAG_COLOURED_3D: {
+                Vertex *va = &vertexBufferT[face->a];
+                Vertex *vb = &vertexBufferT[face->b];
+                Vertex *vc = &vertexBufferT[face->c];
+                Vertex *vd = &vertexBufferT[face->d];
+                if (va->z > 0x100 && vb->z > 0x100 && vc->z > 0x100 && vd->z > 0x100) {
+                    quad[0].x = cx + pX * va->x / va->z;
+                    quad[0].y = cy - pY * va->y / va->z;
+                    quad[1].x = cx + pX * vb->x / vb->z;
+                    quad[1].y = cy - pY * vb->y / vb->z;
+                    quad[2].x = cx + pX * vc->x / vc->z;
+                    quad[2].y = cy - pY * vc->y / vc->z;
+                    quad[3].x = cx + pX * vd->x / vd->z;
+                    quad[3].y = cy - pY * vd->y / vd->z;
                     DrawFace(quad, face->colour);
                 }
                 break;
+            }
             case FACE_FLAG_COLOURED_2D:
                 quad[0].x = vertexBuffer[face->a].x;
                 quad[0].y = vertexBuffer[face->a].y;
