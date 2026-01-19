@@ -84,12 +84,13 @@ Follow the build instructions [here.](./dependencies/mac/README.md)
 ### Android
 Follow the android build instructions [here.](./dependencies/android/README.md)
 
-## Compiling
+## Compiling (PSP)
 
 Compiling is as simple as typing the following in the root repository directory:
 ```
-cmake -B build
-cmake --build build --config release
+mkdir psp-build && cd psp-build
+psp-cmake .. -DGAME_STATIC=ON -DRETRO_SDL_VERSION=2
+make
 ```
 
 The resulting build will be located somewhere in `build/` depending on your system.

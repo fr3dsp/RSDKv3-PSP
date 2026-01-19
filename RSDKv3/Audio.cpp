@@ -61,6 +61,7 @@ int InitAudioPlayback()
         globalSFXCount = 0;
         for (int i = 0; i < CHANNEL_COUNT; ++i) sfxChannels[i].sfxID = -1;
         pspAudioReady = true;
+        LoadGlobalSfx();
         return true;
     } else {
         audioEnabled = false;
@@ -866,15 +867,19 @@ void LoadSfx(char *filePath, byte sfxID)
         int sampleRate = 44100;
         int bitsPerSample = 16;
         
+        #define READ_U16(p) ((uint)(p)[0] | ((uint)(p)[1] << 8))
+        #define READ_U32(p) ((uint)(p)[0] | ((uint)(p)[1] << 8) | ((uint)(p)[2] << 16) | ((uint)(p)[3] << 24))
+        #define READ_S16(p) ((Sint16)READ_U16(p))
+        
         while (pos < (int)info.vFileSize - 8) {
             char chunkId[5] = {0};
             memcpy(chunkId, sfx + pos, 4);
-            int chunkSize = *(int*)(sfx + pos + 4);
+            int chunkSize = (int)READ_U32(sfx + pos + 4);
             
             if (strcmp(chunkId, "fmt ") == 0) {
-                channels = *(short*)(sfx + pos + 10);
-                sampleRate = *(int*)(sfx + pos + 12);
-                bitsPerSample = *(short*)(sfx + pos + 22);
+                channels = (int)READ_U16(sfx + pos + 10);
+                sampleRate = (int)READ_U32(sfx + pos + 12);
+                bitsPerSample = (int)READ_U16(sfx + pos + 22);
             }
             else if (strcmp(chunkId, "data") == 0) {
                 dataPos = pos + 8;
@@ -900,13 +905,17 @@ void LoadSfx(char *filePath, byte sfxID)
             }
             
             if (bitsPerSample == 16) {
-                Sint16* src16 = (Sint16*)(sfx + dataPos);
+                byte* src8 = sfx + dataPos;
                 if (channels == 2) {
                     for (int i = 0; i < srcSampleCount; i++) {
-                        monoBuffer[i] = (src16[i * 2] + src16[i * 2 + 1]) / 2;
+                        Sint16 left = READ_S16(src8 + i * 4);
+                        Sint16 right = READ_S16(src8 + i * 4 + 2);
+                        monoBuffer[i] = (left + right) / 2;
                     }
                 } else {
-                    memcpy(monoBuffer, sfx + dataPos, srcSampleCount * sizeof(Sint16));
+                    for (int i = 0; i < srcSampleCount; i++) {
+                        monoBuffer[i] = READ_S16(src8 + i * 2);
+                    }
                 }
             }
             else if (bitsPerSample == 8) {
@@ -922,6 +931,10 @@ void LoadSfx(char *filePath, byte sfxID)
                     }
                 }
             }
+        
+        #undef READ_U16
+        #undef READ_U32
+        #undef READ_S16
             
             int resampledCount = srcSampleCount;
             Sint16* resampledBuffer = monoBuffer;
