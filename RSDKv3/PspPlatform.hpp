@@ -1,3 +1,8 @@
+/*
+ * Since I genuinely feel like being a dick, for anyone else doing a PSP port of the other RSDK versions you may **NOT** use this file without my permission (yes that includes you Freddy).
+ * If you WANT to use it email: funkiin.forever@gmail.com
+ *  - ven <3
+*/
 #ifndef PSP_PLATFORM_H
 #define PSP_PLATFORM_H
 
