@@ -481,14 +481,14 @@ void RetroEngine::Run()
                             if (ProcessVideo() == 1)
                                 gameMode = ENGINE_MAINGAME;
                             break;
-                            
+
 #if RETRO_USE_MOD_LOADER
                         case ENGINE_INITMODMENU:
                             Engine.LoadGameConfig("Data/Game/GameConfig.bin");
                             InitDevMenu();
 
                             ResetCurrentStageFolder();
-                            
+
                             SetupTextMenu(&gameMenu[0], 0);
                             AddTextMenuEntry(&gameMenu[0], "MOD LIST");
                             SetupTextMenu(&gameMenu[1], 0);
@@ -1101,10 +1101,12 @@ bool RetroEngine::LoadGameConfig(const char *filePath)
             FileRead(&fileBuffer2, 1);
             globalVariables[v] += fileBuffer2;
         }
-        
+
+#if !RETRO_USE_MOD_LOADER // These are moved to after Game.xml initialization with the mod loader
         SetGlobalVariableByName("Options.DevMenuFlag", devMenu ? 1 : 0);
         SetGlobalVariableByName("Engine.PlatformId", RETRO_GAMEPLATFORMID);
         SetGlobalVariableByName("Engine.DeviceType", RETRO_GAMEPLATFORM);
+#endif
 
         // Read SFX
         byte sfxCount = 0;
@@ -1165,6 +1167,25 @@ bool RetroEngine::LoadGameConfig(const char *filePath)
             }
         }
 
+        CloseFile();
+
+#if RETRO_USE_MOD_LOADER
+        LoadXMLWindowText();
+        LoadXMLVariables();
+        LoadXMLPalettes();
+        LoadXMLObjects();
+        LoadXMLPlayers(NULL);
+        LoadXMLStages(NULL, 0);
+
+        // These are normally earlier in this function, moved here for modders' sake
+        SetGlobalVariableByName("Options.DevMenuFlag", devMenu ? 1 : 0);
+        SetGlobalVariableByName("Engine.PlatformId", RETRO_GAMEPLATFORMID);
+        SetGlobalVariableByName("Engine.DeviceType", RETRO_GAMEPLATFORM);
+
+        SetGlobalVariableByName("Engine.Standalone", 1);
+        SetGlobalVariableByName("game.hasPlusDLC", !RSDK_AUTOBUILD);
+#endif
+
 #if !RETRO_USE_ORIGINAL_CODE
 #if RETRO_USE_MOD_LOADER
         if (!disableSaveIniOverride) {
@@ -1179,23 +1200,7 @@ bool RetroEngine::LoadGameConfig(const char *filePath)
 #if RETRO_USE_MOD_LOADER
         }
 #endif
-#endif
 
-        CloseFile();
-
-#if RETRO_USE_MOD_LOADER
-        LoadXMLWindowText();
-        LoadXMLVariables();
-        LoadXMLPalettes();
-        LoadXMLObjects();
-        LoadXMLPlayers(NULL);
-        LoadXMLStages(NULL, 0);
-
-        SetGlobalVariableByName("Engine.Standalone", 1);
-        SetGlobalVariableByName("game.hasPlusDLC", !RSDK_AUTOBUILD);
-#endif
-
-#if !RETRO_USE_ORIGINAL_CODE
         if (strlen(Engine.startSceneFolder) && strlen(Engine.startSceneID)) {
             SceneInfo *scene = &stageList[STAGELIST_BONUS][0xFE]; // slot 0xFF is used for "none" startStage
             strcpy(scene->name, "_RSDK_SCENE");
